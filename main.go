@@ -236,17 +236,34 @@ func deconstructRMState() {
 	}
 }
 
-func remindme(s *discordgo.Session, m *discordgo.MessageCreate) {
+func remindmeHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
+	m.Content = strings.TrimSpace(m.Content)
+	if len(m.Content) == 0 {
+		return
+	}
+	if m.Content[0] != '!' {
+		return
+	}
+	i := strings.Index(m.Content, " ")
+	if i < 0 {
+		i = len(m.Content)
+	}
+	cmd := m.Content[:i]
+	if cmd != "!remindme" {
+		return
+	}
+	logger.Printf("User %s sent command \"%s\"", (*userLog)(m.Author), m.Content)
 	author := m.Author
 	var remindmeUsageMsg = author.Mention() + " Usage: !remindme <duration> <message>..."
-	i := strings.Index(m.Content, " ")
+	m.Content = strings.TrimSpace(m.Content[i:])
+	i = strings.Index(m.Content, " ")
 	if i < 0 {
 		sendMsg(s, m.ChannelID, remindmeUsageMsg)
 		return
 	}
-	dStr := m.Content[:i]
+	durationString := m.Content[:i]
 	m.Content = strings.TrimSpace(m.Content[i:])
-	d, err := time.ParseDuration(dStr)
+	duration, err := time.ParseDuration(durationString)
 	if err != nil {
 		sendMsg(s, m.ChannelID, "remindme: invalid duration")
 		sendMsg(s, m.ChannelID, remindmeUsageMsg)
@@ -260,12 +277,12 @@ func remindme(s *discordgo.Session, m *discordgo.MessageCreate) {
 	r := &reminder{
 		userID:   author.ID,
 		creation: time.Now().In(time.UTC),
-		duration: d,
+		duration: duration,
 		message:  msg,
 	}
 	rmState.Add(r)
 	logger.Printf("Set reminder for %s to go off %s with the message \"%s\"",
-		(*userLog)(m.Author), r.creation.Add(d), msg)
+		(*userLog)(m.Author), r.creation.Add(duration), msg)
 	//sendMsg(s, m.ChannelID, author.Mention()+" OK")
 	addReaction(s, m.ChannelID, m.ID, "🆗")
 }
@@ -346,28 +363,7 @@ func main() {
 	}
 	defer deconstructRMState()
 	// Register handler
-	session.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		m.Content = strings.TrimSpace(m.Content)
-		if len(m.Content) == 0 {
-			return
-		}
-		if m.Content[0] != '!' {
-			return
-		}
-		i := strings.Index(m.Content, " ")
-		if i < 0 {
-			i = len(m.Content)
-		}
-		cmd := strings.ToLower(m.Content[1:i])
-		logger.Printf("User %s sent command \"%s\"", (*userLog)(m.Author), m.Content)
-		if i < len(m.Content) {
-			m.Content = strings.TrimSpace(m.Content[i:])
-		}
-		switch cmd {
-		case "remindme":
-			remindme(s, m)
-		}
-	})
-	// Terminate when signaled.
+	session.AddHandler(remindmeHandler)
+
 	<-stop
 }
