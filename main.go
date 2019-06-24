@@ -296,9 +296,38 @@ Usage:
 	}
 	logger.Printf("User %s sent command \"%s\"", (*userLog)(m.Author), m.Content)
 	switch {
-	case remindmeConfig.List, remindmeConfig.Cancel:
+	case remindmeConfig.List:
+		authorID := m.Author.ID
+		dm, err := s.UserChannelCreate(authorID)
+		if err != nil {
+			logger.Printf("unable to open private channel with %s for list command: %v",
+				(*userLog)(m.Author), err)
+			return
+		}
+		rmState.Lock()
+		defer rmState.Unlock()
+		i := sort.Search(len(rmState.reminders), func(i int) bool {
+			return rmState.reminders[i].userID >= authorID
+		})
+		j := sort.Search(len(rmState.reminders), func(i int) bool {
+			return rmState.reminders[i].userID > authorID
+		})
+		if j - i == 0 {
+			sendMsg(s, dm.ID, "no reminders found")
+			return
+		}
+		list := new(strings.Builder)
+		list.WriteString("creation,expiration,message\n")
+		for _, r := range rmState.reminders[i:j] {
+			list.WriteString(fmt.Sprintf("%s,%s,%q\n",
+				r.creation.Format(time.RFC3339Nano),
+				r.expiration.Format(time.RFC3339Nano),
+				r.message,
+			))
+		}
+		sendMsg(s, dm.ID, list.String())
+	case remindmeConfig.Cancel:
 		sendMsg(s, m.ChannelID, "unimplemented")
-		return
 	default:
 		author := m.Author
 		creation := time.Now().In(time.UTC)
