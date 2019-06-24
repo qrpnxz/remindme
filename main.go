@@ -63,17 +63,17 @@ func (u *userLog) String() string {
 }
 
 type reminder struct {
-	userID   string
-	creation time.Time
-	duration time.Duration
-	message  string
+	userID     string
+	creation   time.Time
+	expiration time.Time
+	message    string
 }
 
 func (r *reminder) String() string {
 	return fmt.Sprintf("%s,%s,%s,%q",
 		r.userID,
 		r.creation.Format(time.RFC3339Nano),
-		r.duration,
+		r.expiration.Format(time.RFC3339Nano),
 		r.message,
 	)
 }
@@ -104,8 +104,7 @@ func (rs *remindmeState) Add(r *reminder) {
 		logger.Printf("Sent reminder for %s created %s with the message \"%s\"",
 			(*userLog)(user), r.creation, r.message)
 	}
-	expiration := r.creation.Add(r.duration)
-	fromNow := time.Until(expiration)
+	fromNow := time.Until(r.expiration)
 	if int64(fromNow) <= 1 {
 		sendReminder()
 		return
@@ -158,7 +157,7 @@ func (rs *remindmeState) ReadFrom(r io.Reader) (int64, error) {
 		if err != nil {
 			return n, fmt.Errorf("invalid reminder record: %s", record)
 		}
-		r.duration, err = time.ParseDuration(record[2])
+		r.expiration, err = time.Parse(time.RFC3339Nano, record[2])
 		if err != nil {
 			return n, fmt.Errorf("invalid reminder record: %s", record)
 		}
@@ -291,21 +290,23 @@ Usage:
 		return
 	default:
 		author := m.Author
+		creation := time.Now().In(time.UTC)
 		duration, err := parseDuration(remindmeConfig.Duration)
 		if err != nil {
 			parser.HelpHandler(err, remindmeUsage)
 			return
 		}
+		expiration := creation.Add(duration)
 		message := strings.Join(remindmeConfig.Message, " ")
 		r := &reminder{
-			userID:   author.ID,
-			creation: time.Now().In(time.UTC),
-			duration: duration,
-			message:  message,
+			userID:     author.ID,
+			creation:   creation,
+			expiration: expiration,
+			message:    message,
 		}
 		rmState.Add(r)
 		logger.Printf("Set reminder for %s to go off %s with the message %q",
-			(*userLog)(m.Author), r.creation.Add(duration), message)
+			(*userLog)(m.Author), expiration, message)
 		addReaction(s, m.ChannelID, m.ID, "🆗")
 	}
 }
