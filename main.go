@@ -263,9 +263,9 @@ func remindmeHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	durationString := m.Content[:i]
 	m.Content = strings.TrimSpace(m.Content[i:])
-	duration, err := time.ParseDuration(durationString)
+	duration, err := parseDuration(durationString)
 	if err != nil {
-		sendMsg(s, m.ChannelID, "remindme: invalid duration")
+		sendMsg(s, m.ChannelID, "remindme: " + err.Error())
 		sendMsg(s, m.ChannelID, remindmeUsageMsg)
 		return
 	}
