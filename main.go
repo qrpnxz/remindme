@@ -229,7 +229,7 @@ func deconstructRMState() {
 	}
 	remindersFile, _ := os.Create(
 		remindersDirname + remindersFilePrefix +
-			time.Now().Format(time.RFC3339) +
+			time.Now().In(time.UTC).Format(time.RFC3339) +
 			remindersFileSuffix)
 	rmState.WriteTo(remindersFile)
 	err = remindersFile.Close()
@@ -331,7 +331,7 @@ func main() {
 	if err != nil && !os.IsExist(err) {
 		panic(fmt.Errorf("unable to create logger directory: %v", err))
 	}
-	logFile, err := os.Create(loggerDirname + time.Now().Format(time.RFC3339))
+	logFile, err := os.Create(loggerDirname + time.Now().In(time.UTC).Format(time.RFC3339))
 	logger = log.New(logFile,
 		"", log.Ldate|log.Lmicroseconds|log.Lshortfile|log.LUTC)
 	if err != nil {
