@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -255,17 +256,17 @@ func remindmeHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	logger.Printf("User %s sent command \"%s\"", (*userLog)(m.Author), m.Content)
 	author := m.Author
 	var remindmeUsageMsg = author.Mention() + " Usage: !remindme <duration> <message>..."
-	m.Content = strings.TrimSpace(m.Content[i:])
+	m.Content = strings.TrimLeftFunc(m.Content[i:], unicode.IsSpace)
 	i = strings.Index(m.Content, " ")
 	if i < 0 {
 		sendMsg(s, m.ChannelID, remindmeUsageMsg)
 		return
 	}
 	durationString := m.Content[:i]
-	m.Content = strings.TrimSpace(m.Content[i:])
+	m.Content = strings.TrimLeftFunc(m.Content[i:], unicode.IsSpace)
 	duration, err := parseDuration(durationString)
 	if err != nil {
-		sendMsg(s, m.ChannelID, "remindme: " + err.Error())
+		sendMsg(s, m.ChannelID, "remindme: "+err.Error())
 		sendMsg(s, m.ChannelID, remindmeUsageMsg)
 		return
 	}
