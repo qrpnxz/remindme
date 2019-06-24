@@ -111,26 +111,10 @@ func (rs *remindmeState) Add(r *reminder) {
 		return
 	}
 	rs.Lock()
+	userID, expiration := r.userID, r.expiration
 	t := time.AfterFunc(fromNow, func() {
 		sendReminder()
-		rs.Lock()
-		var k int = -1
-		for i := range rs.reminders {
-			if rs.reminders[i] == r {
-				k = i
-				break
-			}
-		}
-		if k < 0 {
-			logger.Panic("unmatched timer")
-		}
-		rs.reminders[k] = nil
-		copy(rs.reminders[k:], rs.reminders[k+1:])
-		rs.reminders = rs.reminders[:len(rs.reminders)-1]
-		rs.timers[k] = nil
-		copy(rs.timers[k:], rs.timers[k+1:])
-		rs.timers = rs.timers[:len(rs.timers)-1]
-		rs.Unlock()
+		rs.Remove(userID, expiration)
 	})
 	i := sort.Search(len(rs.reminders), func(i int) bool {
 		return rs.reminders[i].userID > r.userID
@@ -142,6 +126,39 @@ func (rs *remindmeState) Add(r *reminder) {
 	copy(rs.timers[i+1:], rs.timers[i:])
 	rs.timers[i] = t
 	rs.Unlock()
+}
+
+func (rs *remindmeState) Remove(userID string, expiration time.Time) bool {
+	rs.Lock()
+	defer rs.Unlock()
+	i := sort.Search(len(rmState.reminders), func(i int) bool {
+		return rmState.reminders[i].userID >= userID
+	})
+	j := sort.Search(len(rmState.reminders), func(i int) bool {
+		return rmState.reminders[i].userID > userID
+	})
+	if j - i == 0 {
+		return false
+	}
+	authorReminders := rmState.reminders[i:j]
+	k := sort.Search(len(authorReminders), func(i int) bool {
+		return authorReminders[i].expiration.After(expiration)
+	})
+	k--
+	if k == -1 || !authorReminders[k].expiration.Equal(expiration) {
+		return false
+	}
+	k += i
+	if !rs.timers[k].Stop() {
+		return false
+	}
+	rs.reminders[k] = nil
+	copy(rs.reminders[k:], rs.reminders[k+1:])
+	rs.reminders = rs.reminders[:len(rs.reminders)-1]
+	rs.timers[k] = nil
+	copy(rs.timers[k:], rs.timers[k+1:])
+	rs.timers = rs.timers[:len(rs.timers)-1]
+	return true
 }
 
 func (rs *remindmeState) ReadFrom(r io.Reader) (int64, error) {
@@ -298,12 +315,6 @@ Usage:
 	switch {
 	case remindmeConfig.List:
 		authorID := m.Author.ID
-		dm, err := s.UserChannelCreate(authorID)
-		if err != nil {
-			logger.Printf("unable to open private channel with %s for list command: %v",
-				(*userLog)(m.Author), err)
-			return
-		}
 		rmState.Lock()
 		defer rmState.Unlock()
 		i := sort.Search(len(rmState.reminders), func(i int) bool {
@@ -313,7 +324,13 @@ Usage:
 			return rmState.reminders[i].userID > authorID
 		})
 		if j - i == 0 {
-			sendMsg(s, dm.ID, "no reminders found")
+			sendMsg(s, m.ChannelID, "you have no reminders")
+			return
+		}
+		dm, err := s.UserChannelCreate(authorID)
+		if err != nil {
+			logger.Printf("unable to open private channel with %s for list command: %v",
+				(*userLog)(m.Author), err)
 			return
 		}
 		list := new(strings.Builder)
@@ -327,7 +344,16 @@ Usage:
 		}
 		sendMsg(s, dm.ID, list.String())
 	case remindmeConfig.Cancel:
-		sendMsg(s, m.ChannelID, "unimplemented")
+		expiration, err := time.Parse(time.RFC3339Nano, remindmeConfig.Expiration)
+		if err != nil {
+			parser.HelpHandler(err, remindmeUsage)
+			return
+		}
+		if rmState.Remove(m.Author.ID, expiration) {
+			addReaction(s, m.ChannelID, m.ID, "✅")
+		} else {
+			addReaction(s, m.ChannelID, m.ID, "❌")
+		}
 	default:
 		author := m.Author
 		creation := time.Now().In(time.UTC)
