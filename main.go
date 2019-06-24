@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/docopt/docopt.go"
 )
 
 const (
@@ -237,55 +238,76 @@ func deconstructRMState() {
 	}
 }
 
+func newRemindmeParser(s *discordgo.Session, channelID string) *docopt.Parser {
+	parser := new(docopt.Parser)
+	parser.HelpHandler = func(err error, usage string) {
+		buflen := len(usage)
+		if err != nil {
+			buflen += len(err.Error())
+		}
+		buf := make([]byte, buflen)
+		n := copy(buf, err.Error())
+		copy(buf[n:], usage)
+		sendMsg(s, channelID, string(buf))
+	}
+	return parser
+}
+
 func remindmeHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	m.Content = strings.TrimSpace(m.Content)
-	if len(m.Content) == 0 {
+	const remindmeUsage = `
+Usage:
+	!remindme list
+	!remindme cancel <expiration>
+	!remindme <duration> [-c|--withcontext] <message>...
+`
+	m.Content = strings.TrimLeftFunc(m.Content, unicode.IsSpace)
+	if m.Content == "" || !strings.HasPrefix(m.Content, "!remindme") {
 		return
 	}
-	if m.Content[0] != '!' {
+	argv := strings.Fields(m.Content)
+	parser := newRemindmeParser(s, m.ChannelID)
+	opts, err := parser.ParseArgs(remindmeUsage, argv[1:], "")
+	if err != nil {
+		logger.Panic("invalid option parser: ", err)
 		return
 	}
-	i := strings.Index(m.Content, " ")
-	if i < 0 {
-		i = len(m.Content)
+	var remindmeConfig struct {
+		List        bool
+		Cancel      bool
+		Expiration  string
+		Duration    string
+		WithContext bool `docopt:"-c,--withcontext"`
+		Message     []string
 	}
-	cmd := m.Content[:i]
-	if cmd != "!remindme" {
+	err = opts.Bind(&remindmeConfig)
+	if err != nil {
+		logger.Panic("unable to bind options: ", err)
 		return
 	}
 	logger.Printf("User %s sent command \"%s\"", (*userLog)(m.Author), m.Content)
-	author := m.Author
-	var remindmeUsageMsg = author.Mention() + " Usage: !remindme <duration> <message>..."
-	m.Content = strings.TrimLeftFunc(m.Content[i:], unicode.IsSpace)
-	i = strings.Index(m.Content, " ")
-	if i < 0 {
-		sendMsg(s, m.ChannelID, remindmeUsageMsg)
+	switch {
+	case remindmeConfig.List, remindmeConfig.Cancel:
+		sendMsg(s, m.ChannelID, "unimplemented")
 		return
+	default:
+		author := m.Author
+		duration, err := parseDuration(remindmeConfig.Duration)
+		if err != nil {
+			parser.HelpHandler(err, remindmeUsage)
+			return
+		}
+		message := strings.Join(remindmeConfig.Message, " ")
+		r := &reminder{
+			userID:   author.ID,
+			creation: time.Now().In(time.UTC),
+			duration: duration,
+			message:  message,
+		}
+		rmState.Add(r)
+		logger.Printf("Set reminder for %s to go off %s with the message %q",
+			(*userLog)(m.Author), r.creation.Add(duration), message)
+		addReaction(s, m.ChannelID, m.ID, "🆗")
 	}
-	durationString := m.Content[:i]
-	m.Content = strings.TrimLeftFunc(m.Content[i:], unicode.IsSpace)
-	duration, err := parseDuration(durationString)
-	if err != nil {
-		sendMsg(s, m.ChannelID, "remindme: "+err.Error())
-		sendMsg(s, m.ChannelID, remindmeUsageMsg)
-		return
-	}
-	msg := m.Content
-	if msg == "" {
-		sendMsg(s, m.ChannelID, remindmeUsageMsg)
-		return
-	}
-	r := &reminder{
-		userID:   author.ID,
-		creation: time.Now().In(time.UTC),
-		duration: duration,
-		message:  msg,
-	}
-	rmState.Add(r)
-	logger.Printf("Set reminder for %s to go off %s with the message \"%s\"",
-		(*userLog)(m.Author), r.creation.Add(duration), msg)
-	//sendMsg(s, m.ChannelID, author.Mention()+" OK")
-	addReaction(s, m.ChannelID, m.ID, "🆗")
 }
 
 func main() {
