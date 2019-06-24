@@ -111,8 +111,7 @@ func (rs *remindmeState) Add(r *reminder) {
 		return
 	}
 	rs.Lock()
-	rs.reminders = append(rs.reminders, r)
-	rs.timers = append(rs.timers, time.AfterFunc(fromNow, func() {
+	t := time.AfterFunc(fromNow, func() {
 		sendReminder()
 		rs.Lock()
 		var k int = -1
@@ -132,7 +131,16 @@ func (rs *remindmeState) Add(r *reminder) {
 		copy(rs.timers[k:], rs.timers[k+1:])
 		rs.timers = rs.timers[:len(rs.timers)-1]
 		rs.Unlock()
-	}))
+	})
+	i := sort.Search(len(rs.reminders), func(i int) bool {
+		return rs.reminders[i].userID > r.userID
+	})
+	rs.reminders = append(rs.reminders, nil)
+	copy(rs.reminders[i+1:], rs.reminders[i:])
+	rs.reminders[i] = r
+	rs.timers = append(rs.timers, nil)
+	copy(rs.timers[i+1:], rs.timers[i:])
+	rs.timers[i] = t
 	rs.Unlock()
 }
 
