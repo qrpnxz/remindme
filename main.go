@@ -268,7 +268,9 @@ Usage:
 	parser := newRemindmeParser(s, m.ChannelID)
 	opts, err := parser.ParseArgs(remindmeUsage, argv[1:], "")
 	if err != nil {
-		logger.Panic("invalid option parser: ", err)
+		if _, ok := err.(*docopt.UserError); !ok {
+			logger.Panic("invalid option parser: ", err)
+		}
 		return
 	}
 	var remindmeConfig struct {
