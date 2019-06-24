@@ -93,6 +93,7 @@ func (rs *remindmeState) Add(r *reminder) {
 		if err != nil {
 			logger.Printf("unable to open private channel with %s to send the message \"%s\": %v",
 				r.userID, r.message, err)
+			return
 		}
 		dm, err := rs.session.UserChannelCreate(user.ID)
 		if err != nil {
@@ -100,7 +101,7 @@ func (rs *remindmeState) Add(r *reminder) {
 				(*userLog)(user), r.message, err)
 			return
 		}
-		sendMsg(rs.session, dm.ID, fmt.Sprintf("%s Message from %s: %s", user, r.creation, r.message))
+		sendMsg(rs.session, dm.ID, fmt.Sprintf("Reminder from %s: %s", r.creation, r.message))
 		logger.Printf("Sent reminder for %s created %s with the message \"%s\"",
 			(*userLog)(user), r.creation, r.message)
 	}
