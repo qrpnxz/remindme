@@ -297,6 +297,11 @@ Usage:
 			return
 		}
 		expiration := creation.Add(duration)
+		if remindmeConfig.WithContext {
+			remindmeConfig.Message = append(remindmeConfig.Message,
+				fmt.Sprintf("\nContext: https://discordapp.com/channels/%s/%s/%s",
+					m.GuildID, m.ChannelID, m.ID))
+		}
 		message := strings.Join(remindmeConfig.Message, " ")
 		r := &reminder{
 			userID:     author.ID,
