@@ -333,10 +333,11 @@ Usage:
 				(*userLog)(m.Author), err)
 			return
 		}
+		const listFmt = "`%s` :small_blue_diamond: `%s` :small_blue_diamond: `%s`\n"
 		list := new(strings.Builder)
-		list.WriteString("creation,expiration,message\n")
+		list.WriteString(fmt.Sprintf(listFmt, "creation", "expiration", "message"))
 		for _, r := range rmState.reminders[i:j] {
-			list.WriteString(fmt.Sprintf("%s,%s,%q\n",
+			list.WriteString(fmt.Sprintf(listFmt,
 				r.creation.Format(time.RFC3339Nano),
 				r.expiration.Format(time.RFC3339Nano),
 				r.message,
