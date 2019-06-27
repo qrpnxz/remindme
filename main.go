@@ -138,18 +138,21 @@ func (rs *remindmeState) Remove(userID string, expiration time.Time) bool {
 		return rmState.reminders[i].userID > userID
 	})
 	if j - i == 0 {
+		logger.Print("Reminder for removal not found.")
 		return false
 	}
 	authorReminders := rmState.reminders[i:j]
 	k := sort.Search(len(authorReminders), func(i int) bool {
-		return authorReminders[i].expiration.After(expiration)
+		return authorReminders[i].expiration.Before(expiration)
 	})
 	k--
 	if k == -1 || !authorReminders[k].expiration.Equal(expiration) {
+		logger.Print("Reminder for removal not found.")
 		return false
 	}
 	k += i
 	if !rs.timers[k].Stop() {
+		logger.Print("Reminder for removal already triggering.")
 		return false
 	}
 	rs.reminders[k] = nil
@@ -158,6 +161,7 @@ func (rs *remindmeState) Remove(userID string, expiration time.Time) bool {
 	rs.timers[k] = nil
 	copy(rs.timers[k:], rs.timers[k+1:])
 	rs.timers = rs.timers[:len(rs.timers)-1]
+	logger.Printf("Removed reminder for %s to go off %s", userID, expiration)
 	return true
 }
 
