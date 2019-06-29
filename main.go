@@ -270,12 +270,13 @@ func deconstructRMState() {
 func newRemindmeParser(s *discordgo.Session, channelID string) *docopt.Parser {
 	parser := new(docopt.Parser)
 	parser.HelpHandler = func(err error, usage string) {
-		buflen := len(usage)
+		var errStr string
 		if err != nil {
-			buflen += len(err.Error())
+			errStr = err.Error()
 		}
+		buflen := len(errStr) + len(usage)
 		buf := make([]byte, buflen)
-		n := copy(buf, err.Error())
+		n := copy(buf, errStr)
 		copy(buf[n:], usage)
 		sendMsg(s, channelID, string(buf))
 	}
